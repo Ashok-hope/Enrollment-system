@@ -1,53 +1,90 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 
-class KeyPairResponse(BaseModel):
-    public_key_hex: str
-    private_key_hex: Optional[str] = None
-    identity_hash: str # SHA-256 of public key
+class UserRegister(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: str # "student" or "instructor"
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserProfile(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    role: str
+    public_key: str
+    created_at: str
 
 class CourseCreate(BaseModel):
     course_code: str # e.g. "CS-801"
-    title: str # e.g. "Advanced Cryptography & Blockchain"
+    title: str # e.g. "Advanced Cryptography"
     description: str
     instructor_name: str
-    instructor_public_key: str # Hex-encoded Ed25519 public key
+    instructor_email: str
+    instructor_public_key: str
     capacity: int = 30
-    schedule_start: str # ISO timestamp e.g. "2026-10-15T21:00:00Z"
-    schedule_end: str # ISO timestamp e.g. "2026-10-15T23:00:00Z"
+    is_timed: bool = False # If True: uses schedule_start & end; If False: instructor manually toggles start/stop
+    schedule_start: Optional[str] = None
+    schedule_end: Optional[str] = None
 
-class Course(CourseCreate):
-    course_id: str # UUID or deterministic hash
+class Course(BaseModel):
+    course_id: str
+    course_code: str
+    title: str
+    description: str
+    instructor_name: str
+    instructor_email: str
+    instructor_public_key: str
+    capacity: int = 30
+    is_timed: bool = False
+    schedule_start: Optional[str] = None
+    schedule_end: Optional[str] = None
+    is_enrollment_open: bool = False
     created_at: str
     enrolled_count: int = 0
-    status: str = "SCHEDULED" # SCHEDULED, OPEN, CLOSED
+    status: str = "PENDING_START" # "PENDING_START", "OPEN", "CLOSED"
 
-class InviteRequest(BaseModel):
+class InviteRequestCreate(BaseModel):
     course_id: str
-    student_public_key: str
     student_name: str
+    student_email: str
+    student_public_key: str
+
+class InviteRequestRecord(BaseModel):
+    request_id: str
+    course_id: str
+    student_name: str
+    student_email: str
+    student_public_key: str
+    status: str # "PENDING", "APPROVED", "REJECTED"
+    created_at: str
+    invite_id: Optional[str] = None
 
 class InviteCertificate(BaseModel):
     invite_id: str
     course_id: str
     student_public_key: str
-    valid_from: str # Schedule start
-    valid_until: str # Schedule end
+    valid_from: Optional[str] = None
+    valid_until: Optional[str] = None
     nonce: str
-    admin_signature: str # Hex Ed25519 signature from instructor_public_key
+    admin_signature: str
     issued_at: str
 
 class EnrollmentTransaction(BaseModel):
-    tx_id: str # SHA-256 hash of tx payload
+    tx_id: str
     course_id: str
     student_public_key: str
-    encrypted_details: str # AES-256-GCM encrypted sensitive data (e.g. real name, student ID, CGPA)
-    iv_hex: str # AES-GCM IV (12 bytes hex)
-    tag_hex: str # AES-GCM Auth Tag (16 bytes hex)
-    invite_certificate: InviteCertificate # Cryptographic proof signed by Admin
-    timestamp: str # ISO timestamp when student signed
-    nonce: str # Unique anti-replay nonce
-    student_signature: str # Hex Ed25519 signature of the student
+    encrypted_details: str
+    iv_hex: str
+    tag_hex: str
+    invite_certificate: InviteCertificate
+    timestamp: str
+    nonce: str
+    student_signature: str
 
 class BlockHeader(BaseModel):
     index: int
@@ -64,7 +101,7 @@ class Block(BaseModel):
 class AuditIssue(BaseModel):
     block_index: int
     tx_id: Optional[str] = None
-    issue_type: str # HASH_MISMATCH, SIGNATURE_INVALID, MERKLE_ROOT_INVALID, INVITE_FORGERY, TIME_VIOLATION
+    issue_type: str
     description: str
     expected: Optional[str] = None
     actual: Optional[str] = None
@@ -76,10 +113,5 @@ class AuditReport(BaseModel):
     issues: List[AuditIssue]
     verified_at: str
 
-# Simulation models
-class TamperBlockPayload(BaseModel):
-    block_index: int
-    tamper_type: str # "modify_tx_data", "inject_fake_student", "corrupt_hash", "inject_unvalidated_invite"
-    tx_index: Optional[int] = 0
-    fake_student_name: Optional[str] = "Eve Malicious (Rogue Developer)"
-    fake_student_pubkey: Optional[str] = None
+class SqlExecutionRequest(BaseModel):
+    query: str

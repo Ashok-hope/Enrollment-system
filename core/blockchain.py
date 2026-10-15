@@ -10,16 +10,9 @@ from core.crypto_engine import (
     sha256_hex, sha256_str, canonical_json, MerkleTree, 
     verify_signature_ecdsa, sign_data_ecdsa
 )
+from core.logger import log_event
 
 class BlockchainLedger:
-    """
-    Cryptographic Blockchain Ledger for Course Enrollments.
-    Enforces zero-trust cryptographic validation:
-    - Admin-signed Invitations (EUF-CMA)
-    - Student-signed Transactions (EUF-CMA)
-    - Merkle Root inclusion
-    - SHA-256 Block Hashing and Linkage
-    """
     def __init__(self):
         self.chain: List[Block] = []
         self.pending_transactions: List[EnrollmentTransaction] = []
@@ -43,6 +36,7 @@ class BlockchainLedger:
         )
         genesis_block = Block(header=header, transactions=[])
         self.chain.append(genesis_block)
+        log_event("BLOCKCHAIN", f"Genesis Block #0 initialized [Hash: {block_hash[:16]}...]")
 
     @staticmethod
     def calculate_block_hash(index: int, prev_hash: str, merkle_root: str, timestamp: str, nonce: int) -> str:
@@ -50,19 +44,18 @@ class BlockchainLedger:
         return sha256_hex(payload)
 
     @staticmethod
-    def compute_invite_signing_bytes(course_id: str, student_public_key: str, valid_from: str, valid_until: str, nonce: str) -> bytes:
+    def compute_invite_signing_bytes(course_id: str, student_public_key: str, valid_from: Optional[str], valid_until: Optional[str], nonce: str) -> bytes:
         data = {
             "course_id": course_id,
             "student_public_key": student_public_key,
-            "valid_from": valid_from,
-            "valid_until": valid_until,
+            "valid_from": valid_from or "UNTIMED",
+            "valid_until": valid_until or "UNTIMED",
             "nonce": nonce
         }
         return canonical_json(data)
 
     @staticmethod
     def compute_tx_signing_bytes(tx: Dict[str, Any]) -> bytes:
-        # Standardize transaction data payload for student digital signature
         data = {
             "course_id": tx["course_id"],
             "student_public_key": tx["student_public_key"],
@@ -77,10 +70,6 @@ class BlockchainLedger:
         return canonical_json(data)
 
     def verify_invite_certificate(self, invite: InviteCertificate, instructor_public_key: str) -> Tuple[bool, str]:
-        """
-        Verify that an invite certificate was genuinely signed by the Course Instructor/Admin.
-        Prevents Developer DB-Injection of unauthorized validated students!
-        """
         signing_bytes = self.compute_invite_signing_bytes(
             invite.course_id,
             invite.student_public_key,
@@ -93,34 +82,34 @@ class BlockchainLedger:
             return False, "FORGERY DETECTED: Invalid Admin digital signature on invitation certificate."
         return True, "Valid invitation certificate"
 
-    def verify_transaction(self, tx: EnrollmentTransaction, instructor_public_key: str) -> Tuple[bool, str]:
-        """Verify complete cryptographic proofs on a student's enrollment transaction."""
+    def verify_transaction(self, tx: EnrollmentTransaction, course: Course) -> Tuple[bool, str]:
         # 1. Anti-Replay: check if nonce already spent
         replay_key = f"{tx.student_public_key}:{tx.nonce}"
         if replay_key in self.spent_nonces:
             return False, "REPLAY ATTACK: Nonce has already been spent."
 
-        # 2. Check if student already enrolled in this course
+        # 2. Check duplicate enrollment
         enrollment_key = f"{tx.course_id}:{tx.student_public_key}"
         if enrollment_key in self.enrolled_students:
             return False, "DUPLICATE ENROLLMENT: Student is already enrolled in this course."
 
-        # 3. Verify Admin's signature on the embedded invitation certificate
-        valid_invite, reason = self.verify_invite_certificate(tx.invite_certificate, instructor_public_key)
+        # 3. Verify Admin's signature on invitation certificate
+        valid_invite, reason = self.verify_invite_certificate(tx.invite_certificate, course.instructor_public_key)
         if not valid_invite:
             return False, f"INVITE VALIDATION FAILED: {reason}"
 
-        # 4. Schedule & Time-Lock Enforcement
-        # ISO timestamp string comparisons are lexicographically valid if formatted in UTC
-        tx_time = tx.timestamp
-        valid_from = tx.invite_certificate.valid_from
-        valid_until = tx.invite_certificate.valid_until
-        if tx_time < valid_from:
-            return False, f"TIME-LOCK VIOLATION: Enrollment has not started yet (Starts at: {valid_from}, Tx Time: {tx_time})."
-        if tx_time > valid_until:
-            return False, f"TIME-LOCK EXPIRED: Enrollment window closed at {valid_until}."
+        # 4. Schedule & Open Status Enforcement
+        if course.is_timed and course.schedule_start and course.schedule_end:
+            tx_time = tx.timestamp
+            if tx_time < course.schedule_start:
+                return False, f"TIME-LOCK VIOLATION: Enrollment has not started yet (Starts at: {course.schedule_start}, Tx Time: {tx_time})."
+            if tx_time > course.schedule_end:
+                return False, f"TIME-LOCK EXPIRED: Enrollment window closed at {course.schedule_end}."
+        else:
+            if not course.is_enrollment_open:
+                return False, "ENROLLMENT CLOSED: Instructor has not started enrollment yet."
 
-        # 5. Verify Student's Digital Signature on the transaction
+        # 5. Verify Student's Digital Signature
         signing_bytes = self.compute_tx_signing_bytes(tx.model_dump())
         computed_tx_id = sha256_hex(signing_bytes)
         if tx.tx_id.lower() != computed_tx_id.lower():
@@ -132,19 +121,19 @@ class BlockchainLedger:
 
         return True, "Transaction is cryptographically valid"
 
-    def add_transaction(self, tx: EnrollmentTransaction, instructor_public_key: str) -> Tuple[bool, str]:
-        """Validate and queue an incoming enrollment transaction into the pending pool."""
-        is_valid, msg = self.verify_transaction(tx, instructor_public_key)
+    def add_transaction(self, tx: EnrollmentTransaction, course: Course) -> Tuple[bool, str]:
+        is_valid, msg = self.verify_transaction(tx, course)
         if not is_valid:
+            log_event("SECURITY", f"Transaction rejected: {msg}", level="WARN")
             return False, msg
 
         self.pending_transactions.append(tx)
         self.spent_nonces.add(f"{tx.student_public_key}:{tx.nonce}")
         self.enrolled_students.add(f"{tx.course_id}:{tx.student_public_key}")
+        log_event("ENROLLMENT", f"Transaction verified for student [{tx.student_public_key[:12]}...] in course {tx.course_id}")
         return True, "Transaction verified and queued for block inclusion."
 
     def mine_block(self) -> Optional[Block]:
-        """Commit pending transactions into a new chained block with Merkle Tree."""
         if not self.pending_transactions:
             return None
 
@@ -156,12 +145,10 @@ class BlockchainLedger:
         prev_hash = last_block.header.block_hash
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-        # Compute Merkle Root
         tx_hashes = [tx.tx_id for tx in tx_list]
         merkle_tree = MerkleTree(tx_hashes)
         merkle_root = merkle_tree.root
 
-        # Block Hash
         block_hash = self.calculate_block_hash(new_index, prev_hash, merkle_root, timestamp, 0)
 
         header = BlockHeader(
@@ -174,24 +161,15 @@ class BlockchainLedger:
         )
         new_block = Block(header=header, transactions=tx_list)
         self.chain.append(new_block)
+        log_event("BLOCKCHAIN", f"Mined Block #{new_index} with {len(tx_list)} tx(s) [Hash: {block_hash[:16]}... Merkle: {merkle_root[:16]}...]")
         return new_block
 
     def audit_ledger(self, courses_dict: Dict[str, Course]) -> AuditReport:
-        """
-        Deep cryptographic audit of the entire blockchain.
-        Checks:
-        1. Block hash chaining (prev_hash integrity)
-        2. Merkle Root integrity for each block
-        3. Recalculated block hash match
-        4. Every transaction's student digital signature
-        5. Every transaction's admin invitation signature
-        6. Anti-replay and timestamp constraints
-        """
         issues: List[AuditIssue] = []
         total_transactions = 0
         now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
-        # Check Genesis Block
+        # Check Genesis
         genesis = self.chain[0]
         recalc_gen_hash = self.calculate_block_hash(0, genesis.header.prev_hash, genesis.header.merkle_root, genesis.header.timestamp, genesis.header.nonce)
         if recalc_gen_hash.lower() != genesis.header.block_hash.lower():
@@ -254,7 +232,6 @@ class BlockchainLedger:
                 signing_bytes = self.compute_tx_signing_bytes(tx.model_dump())
                 recalc_tx_id = sha256_hex(signing_bytes)
 
-                # Check Tx ID
                 if tx.tx_id.lower() != recalc_tx_id.lower():
                     issues.append(AuditIssue(
                         block_index=curr_block.header.index,
@@ -265,7 +242,6 @@ class BlockchainLedger:
                         actual=tx.tx_id
                     ))
 
-                # Verify Student Signature
                 sig_valid = verify_signature_ecdsa(tx.student_public_key, signing_bytes, tx.student_signature)
                 if not sig_valid:
                     issues.append(AuditIssue(
@@ -277,7 +253,6 @@ class BlockchainLedger:
                         actual=tx.student_signature[:16] + "..."
                     ))
 
-                # Verify Admin Invitation Signature
                 course = courses_dict.get(tx.course_id)
                 if course:
                     invite_bytes = self.compute_invite_signing_bytes(
@@ -302,7 +277,6 @@ class BlockchainLedger:
                             actual="Forged or unverified certificate"
                         ))
 
-                # Nonce replay check
                 replay_key = f"{tx.student_public_key}:{tx.nonce}"
                 if replay_key in seen_nonces:
                     issues.append(AuditIssue(
@@ -323,26 +297,17 @@ class BlockchainLedger:
             verified_at=now_str
         )
 
-    # =================================================================
-    # DEVELOPER TAMPERING SIMULATION METHODS
-    # =================================================================
-
+    # Simulation helpers
     def simulate_tamper_tx_data(self, block_index: int, tx_index: int, field_to_alter: str, fake_value: str) -> Dict[str, Any]:
-        """
-        Simulate a rogue developer altering data directly in a committed transaction.
-        (e.g. changing student name or encrypted payload or course_id).
-        """
         if block_index <= 0 or block_index >= len(self.chain):
             return {"success": False, "error": f"Invalid block index {block_index}"}
-        
         block = self.chain[block_index]
         if tx_index < 0 or tx_index >= len(block.transactions):
             return {"success": False, "error": f"Invalid transaction index {tx_index}"}
-
         target_tx = block.transactions[tx_index]
         old_val = getattr(target_tx, field_to_alter, None)
         setattr(target_tx, field_to_alter, fake_value)
-
+        log_event("SECURITY", f"TAMPER SIMULATION: Modified Block #{block_index} Tx #{tx_index} '{field_to_alter}' to '{fake_value}'", level="WARN")
         return {
             "success": True,
             "action": "tamper_tx_data",
@@ -351,18 +316,13 @@ class BlockchainLedger:
             "field": field_to_alter,
             "old_value": str(old_val),
             "new_value": fake_value,
-            "message": f"Modified field '{field_to_alter}' in Block #{block_index}, Tx #{tx_index} directly in storage without valid signature."
+            "message": f"Directly altered '{field_to_alter}' in Block #{block_index} storage."
         }
 
     def simulate_inject_unauthorized_student(self, block_index: int, fake_student_name: str, fake_pubkey: str) -> Dict[str, Any]:
-        """
-        Simulate a rogue developer inserting an unapproved student directly into a block's transaction list.
-        """
         if block_index <= 0 or block_index >= len(self.chain):
             return {"success": False, "error": f"Invalid block index {block_index}"}
-
         block = self.chain[block_index]
-        # Fabricate a fake invite with a forged signature
         fake_invite = InviteCertificate(
             invite_id=str(uuid.uuid4()),
             course_id="CS-801",
@@ -370,10 +330,9 @@ class BlockchainLedger:
             valid_from="2026-01-01T00:00:00Z",
             valid_until="2026-12-31T23:59:59Z",
             nonce="developer_forged_nonce",
-            admin_signature="bad0000000000000000000000000000000000000000000000000000000000000bad0000000000000000000000000000000000000000000000000000000000000",
+            admin_signature="bad" * 42,
             issued_at="2026-10-15T20:00:00Z"
         )
-
         fake_tx = EnrollmentTransaction(
             tx_id="forged_tx_" + str(uuid.uuid4())[:8],
             course_id="CS-801",
@@ -386,33 +345,29 @@ class BlockchainLedger:
             nonce="developer_injection_nonce",
             student_signature="bad" * 42
         )
-
         block.transactions.append(fake_tx)
+        log_event("SECURITY", f"TAMPER SIMULATION: Injected unauthorized student '{fake_student_name}' into Block #{block_index}", level="WARN")
         return {
             "success": True,
             "action": "inject_unauthorized_student",
             "block_index": block_index,
             "fake_student": fake_student_name,
-            "fake_pubkey": fake_pubkey,
-            "message": f"Injected unauthorized student '{fake_student_name}' into Block #{block_index} directly."
+            "message": f"Injected unauthorized student '{fake_student_name}' into Block #{block_index}."
         }
 
     def simulate_corrupt_block_header(self, block_index: int) -> Dict[str, Any]:
-        """Simulate bit rot or direct database tampering of the block hash."""
         if block_index <= 0 or block_index >= len(self.chain):
             return {"success": False, "error": f"Invalid block index {block_index}"}
-        
         block = self.chain[block_index]
         old_hash = block.header.block_hash
-        # Alter last two hex characters
         corrupted = old_hash[:-2] + ("ff" if not old_hash.endswith("ff") else "00")
         block.header.block_hash = corrupted
-
+        log_event("SECURITY", f"TAMPER SIMULATION: Corrupted Block #{block_index} header hash", level="WARN")
         return {
             "success": True,
             "action": "corrupt_block_header",
             "block_index": block_index,
             "old_hash": old_hash,
             "corrupted_hash": corrupted,
-            "message": f"Corrupted Block #{block_index} header hash in storage."
+            "message": f"Corrupted Block #{block_index} header hash."
         }

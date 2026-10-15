@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Technical Blockchain & Merkle Ledger Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <header class="navbar">
+    <a href="/" class="brand">
+      <div class="brand-icon">⛓️</div>
+      <div class="brand-text">
+        <h1>Blockchain Ledger Explorer</h1>
+        <p>Merkle Roots • Hash Chaining • Digital Signatures</p>
+      </div>
+    </a>
+
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home Portal</a>
+      <a href="/explorer" class="nav-link active">⛓️ Blockchain Explorer</a>
+      <a href="/attacks" class="nav-link">🛡️ Security & Attack Lab</a>
+    </div>
+
+    <div class="nav-user">
+      <div id="explorer-status-badge" class="status-badge pristine">
+        <span class="pulse-dot"></span>
+        <span id="explorer-status-text">LEDGER: PRISTINE</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="loadExplorerChain()">↻ Refresh</button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <div class="card" style="border-left: 4px solid var(--accent-cyan);">
+      <div class="card-header">
+        <div class="card-title">🔍 Cryptographic Ledger Chain Inspector</div>
+        <span class="badge badge-cyan">Zero-Trust Immutability</span>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted);">
+        Every course enrollment transaction is sealed into a chained block. 
+        Each block header cryptographically binds to the previous block hash via <code>SHA-256(index || prev_hash || merkle_root || timestamp || nonce)</code>.
+        Click any block below to inspect its cryptographic signatures, Merkle inclusion proofs, and encrypted payloads.
+      </p>
+    </div>
+
+    <!-- HORIZONTAL BLOCK STREAM -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📦 Blockchain Blocks</div>
+        <button class="btn btn-primary btn-sm" onclick="mineBlock()">⛏️ Mine Pending Pool</button>
+      </div>
+
+      <div id="explorer-chain-stream" class="blockchain-stream">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- BLOCK DETAILS INSPECTOR -->
+    <div id="block-inspector-card" class="card" style="display: none;">
+      <div class="card-header">
+        <div class="card-title" id="inspector-title">Block Header & Cryptographic Data</div>
+        <button class="btn btn-secondary btn-sm" onclick="this.parentElement.parentElement.style.display='none'">✕ Close</button>
+      </div>
+      <div id="inspector-content" class="code-box"></div>
+    </div>
+
+    <!-- LIVE AUDIT SUMMARY -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📋 Live Cryptographic Audit Report</div>
+        <button class="btn btn-secondary btn-sm" onclick="runExplorerAudit()">Re-verify Chain</button>
+      </div>
+      <div id="explorer-audit-content" class="code-box" style="max-height: 200px;">
+Loading cryptographic audit...
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/static/js/crypto_client.js"></script>
+  <script src="/static/js/explorer.js"></script>
+</body>
+</html>

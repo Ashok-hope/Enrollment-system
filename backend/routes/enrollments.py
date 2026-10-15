@@ -16,27 +16,27 @@ def submit_enrollment(tx: EnrollmentTransaction):
     if course.enrolled_count >= course.capacity:
         raise HTTPException(status_code=400, detail=f"Course '{course.course_code}' is full (Capacity: {course.capacity})")
 
-    # 2. Cryptographic and time-lock verification against Instructor's public key
-    is_valid, reason = db.ledger.add_transaction(tx, course.instructor_public_key)
+    # 2. Cryptographic and status verification
+    is_valid, reason = db.ledger.add_transaction(tx, course)
     if not is_valid:
         raise HTTPException(status_code=400, detail=f"Cryptographic verification rejected: {reason}")
 
     course.enrolled_count += 1
+    db.add_course(course)
 
-    # Automatically seal transaction into a new block
+    # Automatically mine transaction into block
     mined_block = db.ledger.mine_block()
     if mined_block:
         db.sync_block_to_sqlite(mined_block)
-        # Calculate Merkle proof for this tx
-        tx_index = next((i for i, t in enumerate(mined_block.transactions) if t.tx_id == tx.tx_id), 0)
         from core.crypto_engine import MerkleTree
         tx_hashes = [t.tx_id for t in mined_block.transactions]
+        tx_index = next((i for i, t in enumerate(mined_block.transactions) if t.tx_id == tx.tx_id), 0)
         tree = MerkleTree(tx_hashes)
         proof = tree.get_proof(tx_index)
 
         return {
             "status": "ENROLLED_AND_MINED",
-            "message": "Enrollment verified and sealed in Blockchain block.",
+            "message": f"Successfully enrolled in {course.course_code}!",
             "receipt": {
                 "block_index": mined_block.header.index,
                 "block_hash": mined_block.header.block_hash,

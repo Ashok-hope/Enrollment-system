@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security & Attack Simulation Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <header class="navbar">
+    <a href="/" class="brand">
+      <div class="brand-icon">🛡️</div>
+      <div class="brand-text">
+        <h1>Security & Attack Lab</h1>
+        <p>Vulnerability Testing & Untrusted-DB Verification</p>
+      </div>
+    </a>
+
+    <div class="nav-links">
+      <a href="/" class="nav-link">Home Portal</a>
+      <a href="/explorer" class="nav-link">⛓️ Blockchain Explorer</a>
+      <a href="/attacks" class="nav-link active">🛡️ Security & Attack Lab</a>
+    </div>
+
+    <div class="nav-user">
+      <div id="attacks-status-badge" class="status-badge pristine">
+        <span class="pulse-dot"></span>
+        <span id="attacks-status-text">LEDGER: PRISTINE</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="runDeepAudit()">Audit</button>
+      <button class="btn btn-secondary btn-sm" onclick="resetLedger()">Reset</button>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- Header Explanation -->
+    <div class="card" style="border-left: 4px solid var(--accent-crimson);">
+      <div class="card-header">
+        <div class="card-title">🧪 Untrusted Developer & Database Attack Sandbox</div>
+        <span class="badge badge-red">Academic Threat Simulation</span>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted);">
+        This laboratory simulates attack vectors where the adversary has <strong>direct backend and database access</strong> (compromised server or malicious developer). 
+        Test default queries or type custom SQL commands below to see how mathematical digital signatures, Merkle trees, and hash-chaining stop the attack in real-time.
+      </p>
+    </div>
+
+    <!-- SQL INJECTION & DATABASE TAMPERING SECTION -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">💾 SQL & Database Direct Tampering Console</div>
+        <span class="badge badge-cyan">Interactive SQLite Engine</span>
+      </div>
+
+      <!-- Pre-configured One-Click Attack Buttons -->
+      <div style="margin-bottom: 1rem;">
+        <label class="form-label">Pre-Configured SQL Attack Scenarios:</label>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('fake_invite')">
+            💥 Attack 1: Inject Fake Validated Student into DB
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('tamper_block')">
+            💥 Attack 2: Tamper Alice's Block Data via UPDATE
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('fake_block')">
+            💥 Attack 3: Insert Forged Block #2 into DB
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('select_invites')">
+            🔍 Query: View All DB Invitations
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('select_blocks')">
+            🔍 Query: View Raw DB Blocks
+          </button>
+        </div>
+      </div>
+
+      <!-- Manual Interactive SQL Textarea -->
+      <div class="form-group">
+        <label class="form-label">Custom SQL Query (Type or modify SQL statements manually):</label>
+        <textarea id="sql-query-input" class="form-textarea form-mono" rows="3" placeholder="Enter custom SQL query, e.g. INSERT INTO invitations (invite_id, course_id, student_public_key, admin_signature) VALUES ('fake1', 'CS-801', 'bad_pubkey', 'bad_sig');"></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-danger" onclick="executeCustomSql()">
+          ⚡ Execute SQL Query on Database
+        </button>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">
+          Database executes raw query $\to$ System immediately runs cryptographic audit.
+        </span>
+      </div>
+
+      <!-- SQL Execution Output -->
+      <div id="sql-result-card" style="margin-top: 1rem; display: none;">
+        <div class="form-label">Database & Cryptographic Response:</div>
+        <div id="sql-result-content" class="code-box"></div>
+      </div>
+    </div>
+
+    <!-- PROTOCOL & ADVANCED ATTACKS -->
+    <div class="grid-2">
+      <!-- Front-Running Attack -->
+      <div class="card" style="border-left: 4px solid var(--accent-amber);">
+        <div class="card-header">
+          <div class="card-title">⏰ Early Enrollment (Front-Running)</div>
+          <span class="badge badge-yellow">Time-Lock Violation</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Attempts to submit an enrollment to course <code>CS-902</code> before its scheduled opening time arrives.
+        </p>
+        <button class="btn btn-danger btn-sm" onclick="runAttack_FrontRunning()">
+          Simulate Early Enrollment Attack
+        </button>
+      </div>
+
+      <!-- Replay Attack -->
+      <div class="card" style="border-left: 4px solid var(--accent-purple);">
+        <div class="card-header">
+          <div class="card-title">🔁 Replay Attack Simulation</div>
+          <span class="badge badge-cyan">Anti-Replay Nonce</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Intercepts an already committed enrollment transaction from Block #1 and attempts to resubmit it.
+        </p>
+        <button class="btn btn-danger btn-sm" onclick="runAttack_Replay()">
+          Simulate Replay Attack
+        </button>
+      </div>
+
+      <!-- Block Hash Corruption -->
+      <div class="card" style="border-left: 4px solid var(--accent-crimson);">
+        <div class="card-header">
+          <div class="card-title">🔗 Block Hash Bit-Rot Corruption</div>
+          <span class="badge badge-red">Hash Chaining</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Corrupts the header hash of Block #1 in storage, breaking the cryptographic link to Block #2.
+        </p>
+        <button class="btn btn-danger btn-sm" onclick="runAttack_CorruptHash()">
+          Corrupt Block Hash
+        </button>
+      </div>
+
+      <!-- Developer Block Injection -->
+      <div class="card" style="border-left: 4px solid var(--accent-crimson);">
+        <div class="card-header">
+          <div class="card-title">👤 Direct Block Student Injection</div>
+          <span class="badge badge-red">Signature Forgery</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+          Rogue developer directly injects "Eve (Rogue Developer)" into Block #1 without student or instructor private keys.
+        </p>
+        <button class="btn btn-danger btn-sm" onclick="runAttack_BlockInjection()">
+          Simulate Block Injection
+        </button>
+      </div>
+    </div>
+
+    <!-- Real-Time Cryptographic Verification Terminal -->
+    <div class="card" style="margin-top: 1.5rem;">
+      <div class="card-header">
+        <div class="card-title">📋 Real-Time Cryptographic Audit Terminal</div>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn btn-primary btn-sm" onclick="runDeepAudit()">Execute Audit</button>
+          <button class="btn btn-secondary btn-sm" onclick="resetLedger()">Restore Clean State</button>
+        </div>
+      </div>
+      <div id="attacks-terminal" class="code-box" style="min-height: 220px;">
+[AUDIT ENGINE ACTIVE]
+Awaiting simulation command or custom SQL execution.
+Execute any attack scenario or SQL statement above to view mathematical diagnostics.
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/static/js/crypto_client.js"></script>
+  <script src="/static/js/attacks.js"></script>
+</body>
+</html>

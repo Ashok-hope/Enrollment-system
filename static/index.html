@@ -3,382 +3,274 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zero-Trust Cryptographic Course Enrollment & Ledger</title>
+  <title>University Course Enrollment Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
   <!-- NAVBAR -->
   <header class="navbar">
-    <div class="brand">
-      <div class="brand-icon">⛓️</div>
+    <a href="/" class="brand">
+      <div class="brand-icon">🎓</div>
       <div class="brand-text">
-        <h1>Zero-Trust Cryptographic Enrollment</h1>
-        <p>Ed25519 / ECDSA • Merkle Ledger • Anti-Tampering Engine</p>
+        <h1>Course Enrollment Portal</h1>
+        <p>Zero-Trust Academic Registration</p>
       </div>
+    </a>
+
+    <!-- Top Links to Dedicated Technical & Attack Pages -->
+    <div class="nav-links">
+      <a href="/" class="nav-link active">Home Portal</a>
+      <a href="/explorer" class="nav-link">⛓️ Blockchain Explorer</a>
+      <a href="/attacks" class="nav-link">🛡️ Security & Attack Lab</a>
     </div>
 
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs">
-      <button class="nav-btn active" onclick="switchTab('tab-student')">🎓 Student Portal</button>
-      <button class="nav-btn" onclick="switchTab('tab-instructor')">👨‍🏫 Instructor Portal</button>
-      <button class="nav-btn" onclick="switchTab('tab-ledger')">⛓️ Blockchain Explorer</button>
-      <button class="nav-btn" onclick="switchTab('tab-attack-lab')">🛡️ Attack & Tamper Lab</button>
-      <button class="nav-btn" onclick="switchTab('tab-identity')">🔑 Key Manager</button>
-    </nav>
-
-    <!-- Global Ledger Health Badge -->
-    <div class="nav-status">
-      <div id="ledger-status-badge" class="status-badge pristine">
-        <span class="pulse-dot"></span>
-        <span id="ledger-status-text">LEDGER: PRISTINE</span>
-      </div>
-      <button class="btn btn-secondary btn-sm" onclick="runGlobalAudit()" title="Run deep cryptographic verification">
-        🔍 Audit
-      </button>
-      <button class="btn btn-secondary btn-sm" onclick="resetLedger()" title="Reset blockchain to clean state">
-        🔄 Reset
-      </button>
+    <!-- Active User & Auth Controls -->
+    <div class="nav-user" id="nav-user-section">
+      <!-- Injected by auth.js -->
     </div>
   </header>
 
-  <!-- MAIN CONTAINER -->
+  <!-- MAIN APP CONTAINER -->
   <main class="container">
 
-    <!-- =================================================================== -->
-    <!-- TAB 1: STUDENT ENROLLMENT PORTAL -->
-    <!-- =================================================================== -->
-    <section id="tab-student" class="tab-pane active">
+    <!-- 1. AUTHENTICATION VIEW (Visible when logged out) -->
+    <section id="auth-view" style="display: none; max-width: 520px; margin: 2rem auto;">
       <div class="card">
         <div class="card-header">
-          <div class="card-title">👤 Active Student Identity</div>
-          <span class="badge badge-cyan">Client-Side WebCrypto (Keys Never Leave Browser)</span>
+          <div class="card-title" id="auth-title">Sign In to Your Account</div>
+          <button class="btn btn-secondary btn-sm" id="auth-toggle-btn" onclick="toggleAuthMode()">Create Account</button>
         </div>
-        <div class="grid-2">
-          <div>
-            <div class="form-group">
-              <label class="form-label">Student Name</label>
-              <input type="text" id="student-name-input" class="form-input" value="Alice Wonderland">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Confidential Enrollment Details (Encrypted with AES-256-GCM)</label>
-              <input type="text" id="student-details-input" class="form-input" value="Alice Wonderland • ID: 2026-CS-409 • CGPA: 3.92 • Specialization: Systems Security">
-            </div>
-          </div>
-          <div>
-            <div class="form-group">
-              <label class="form-label">Public Key (Permanent Cryptographic ID)</label>
-              <div id="student-pubkey-display" class="hash-pill">Loading key...</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Private Key (Held in Client Browser Memory)</label>
-              <div id="student-privkey-display" class="hash-pill" style="color: #94a3b8;">Loading key...</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📚 Available Courses & Time-Locked Enrollment Windows</div>
-          <button class="btn btn-secondary" onclick="loadCourses()">↻ Refresh Courses</button>
-        </div>
-        <div id="courses-list" class="grid-2">
-          <!-- Course cards dynamically loaded here -->
-        </div>
-      </div>
+        <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+          <div class="form-group" id="name-group" style="display: none;">
+            <label class="form-label">Full Name</label>
+            <input type="text" id="auth-name" class="form-input" placeholder="e.g. Alice Wonderland">
+          </div>
 
-      <!-- Enrollment Receipt Modal / Alert -->
-      <div id="enrollment-receipt-box" class="card" style="display: none; border-color: var(--accent-emerald);">
-        <div class="card-header">
-          <div class="card-title" style="color: var(--accent-emerald);">✅ Cryptographic Enrollment Receipt</div>
-          <button class="btn btn-secondary btn-sm" onclick="this.parentElement.parentElement.style.display='none'">✕ Close</button>
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="auth-email" class="form-input" placeholder="e.g. alice@student.edu" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="auth-password" class="form-input" placeholder="••••••••" required>
+          </div>
+
+          <div class="form-group" id="role-group" style="display: none;">
+            <label class="form-label">Account Role</label>
+            <select id="auth-role" class="form-select">
+              <option value="student">Student</option>
+              <option value="instructor">Course Instructor / Admin</option>
+            </select>
+          </div>
+
+          <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+            Sign In
+          </button>
+        </form>
+
+        <div style="border-top: 1px solid var(--border-color); margin-top: 1.5rem; padding-top: 1.25rem;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem; text-align: center;">
+            ⚡ Quick Evaluation Logins (Ideal for Multi-Tab Testing):
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <button class="btn btn-secondary btn-sm" onclick="quickLogin('dr.turing@university.edu', 'admin123')">
+              👨‍🏫 Login as Dr. Alan Turing (Instructor)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="quickLogin('alice@student.edu', 'alice123')">
+              🎓 Login as Alice Wonderland (Student #1)
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="quickLogin('bob@student.edu', 'bob123')">
+              🎓 Login as Bob Smith (Student #2)
+            </button>
+          </div>
         </div>
-        <div id="receipt-content" class="code-box"></div>
       </div>
     </section>
 
-    <!-- =================================================================== -->
-    <!-- TAB 2: INSTRUCTOR PORTAL -->
-    <!-- =================================================================== -->
-    <section id="tab-instructor" class="tab-pane">
+    <!-- 2. STUDENT DASHBOARD (Clean, Human-Centered, Zero Crypto Clutter) -->
+    <section id="student-view" style="display: none;">
+      <!-- Welcome Banner -->
+      <div class="card" style="border-left: 4px solid var(--accent-cyan);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 style="font-size: 1.4rem; font-weight: 700;" id="student-welcome-text">Welcome, Student</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">
+              Register for courses using an enrollment code or link, receive instructor validation, and confirm your seat.
+            </p>
+          </div>
+          <span class="badge badge-cyan">Student Portal</span>
+        </div>
+      </div>
+
       <div class="grid-2">
-        <!-- Create Course Card -->
+        <!-- Join Course with Code/Link -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">➕ Create Course with Time-Lock Schedule</div>
+            <div class="card-title">🔗 Enter Course Code or Link</div>
           </div>
-          <form id="create-course-form" onsubmit="handleCreateCourse(event)">
+          <form onsubmit="handleJoinCourse(event)">
+            <div class="form-group">
+              <label class="form-label">Course Registration Code</label>
+              <input type="text" id="join-course-code" class="form-input form-mono" placeholder="e.g. CS-801" required>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">
+              Send Invitation Request to Instructor
+            </button>
+          </form>
+          <div id="join-status-msg" style="margin-top: 0.75rem; font-size: 0.85rem;"></div>
+        </div>
+
+        <!-- Available Courses Overview -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📚 Available Courses</div>
+            <button class="btn btn-secondary btn-sm" onclick="loadStudentCourses()">↻ Refresh</button>
+          </div>
+          <div id="student-available-courses" style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <!-- Loaded dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- My Applications & Enrolled Courses Table -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📋 My Applications & Enrolled Courses</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadStudentApplications()">↻ Refresh</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Course</th>
+                <th>Instructor</th>
+                <th>Schedule Mode</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="student-applications-tbody">
+              <!-- Loaded dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. INSTRUCTOR DASHBOARD (Clean Course Management & Approval) -->
+    <section id="instructor-view" style="display: none;">
+      <!-- Welcome Banner -->
+      <div class="card" style="border-left: 4px solid var(--accent-purple);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h2 style="font-size: 1.4rem; font-weight: 700;" id="instructor-welcome-text">Welcome, Instructor</h2>
+            <p style="color: var(--text-muted); font-size: 0.875rem;">
+              Manage your course schedules, review student enrollment requests, and approve/reject applicants.
+            </p>
+          </div>
+          <span class="badge badge-green">Instructor Portal</span>
+        </div>
+      </div>
+
+      <!-- Create Course Card -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">➕ Create Course Registration Schedule</div>
+        </div>
+        <form onsubmit="handleCreateCourse(event)">
+          <div class="grid-3">
             <div class="form-group">
               <label class="form-label">Course Code</label>
-              <input type="text" id="new-course-code" class="form-input" placeholder="e.g. CS-905" required>
+              <input type="text" id="course-code-input" class="form-input form-mono" placeholder="e.g. CS-801" required>
             </div>
             <div class="form-group">
               <label class="form-label">Course Title</label>
-              <input type="text" id="new-course-title" class="form-input" placeholder="e.g. Zero-Knowledge Proofs" required>
+              <input type="text" id="course-title-input" class="form-input" placeholder="e.g. Advanced Cryptography" required>
             </div>
             <div class="form-group">
-              <label class="form-label">Description</label>
-              <textarea id="new-course-desc" class="form-textarea" rows="2" placeholder="Course syllabus and prerequisites"></textarea>
+              <label class="form-label">Seat Limit</label>
+              <input type="number" id="course-capacity-input" class="form-input" value="30" min="1" max="500">
             </div>
-            <div class="grid-2">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Course Description</label>
+            <input type="text" id="course-desc-input" class="form-input" placeholder="Prerequisites and syllabus highlights">
+          </div>
+
+          <!-- Schedule Mode: Timed vs Untimed/Manual -->
+          <div class="grid-2" style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1rem;">
+            <div class="form-group">
+              <label class="form-label">Schedule Mode</label>
+              <select id="course-mode-select" class="form-select" onchange="toggleScheduleInputs()">
+                <option value="untimed">Untimed / Manual Start (Instructor controls start & stop)</option>
+                <option value="timed">Timed Schedule (Automatic open & close times)</option>
+              </select>
+            </div>
+
+            <div id="timed-inputs-row" style="display: none;" class="grid-2">
               <div class="form-group">
-                <label class="form-label">Enrollment Start (UTC)</label>
-                <input type="datetime-local" id="new-course-start" class="form-input" required>
+                <label class="form-label">Start Time (UTC)</label>
+                <input type="datetime-local" id="course-start-input" class="form-input">
               </div>
               <div class="form-group">
-                <label class="form-label">Enrollment End (UTC)</label>
-                <input type="datetime-local" id="new-course-end" class="form-input" required>
+                <label class="form-label">End Time (UTC)</label>
+                <input type="datetime-local" id="course-end-input" class="form-input">
               </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Seat Capacity</label>
-              <input type="number" id="new-course-capacity" class="form-input" value="30" min="1" max="500">
-            </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Create Course on Ledger</button>
-          </form>
-        </div>
-
-        <!-- Issue Invitation Card -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">📜 Issue Cryptographic Invitation Token</div>
-            <span class="badge badge-cyan">Admin Digital Signature</span>
           </div>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-            Before a student can enroll, the instructor must pre-validate their public key by signing a capability token. 
-            Because this token requires the instructor's private key, <strong>a rogue database developer cannot forge it</strong>.
-          </p>
-          <form id="issue-invite-form" onsubmit="handleIssueInvite(event)">
-            <div class="form-group">
-              <label class="form-label">Target Course</label>
-              <select id="invite-course-select" class="form-select"></select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Student Public Key</label>
-              <input type="text" id="invite-student-pubkey" class="form-input form-mono" placeholder="Student's ECDSA/Ed25519 public key hex">
-            </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Sign & Issue Invitation Certificate</button>
-          </form>
 
-          <div id="invite-result-box" style="margin-top: 1rem; display: none;">
-            <div class="form-label">Issued Certificate:</div>
-            <div id="invite-result-content" class="code-box"></div>
-          </div>
-        </div>
+          <button type="submit" class="btn btn-primary">Create Course Registration Link</button>
+        </form>
       </div>
-    </section>
 
-    <!-- =================================================================== -->
-    <!-- TAB 3: BLOCKCHAIN EXPLORER & MERKLE TREE -->
-    <!-- =================================================================== -->
-    <section id="tab-ledger" class="tab-pane">
+      <!-- Instructor Courses List & Controls -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title">⛓️ Tamper-Evident Blockchain Stream</div>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-secondary btn-sm" onclick="loadLedgerBlocks()">↻ Refresh Chain</button>
-            <button class="btn btn-primary btn-sm" onclick="mineBlock()">⛏️ Mine Pending Block</button>
-          </div>
+          <div class="card-title">📚 My Courses & Enrollment Controls</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadInstructorCourses()">↻ Refresh</button>
         </div>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-          Each block cryptographically links to the previous block hash: <code>H(prev_hash || merkle_root || timestamp || nonce)</code>.
-          Any data alteration breaks downstream pointers and invalidates Merkle roots.
-        </p>
-
-        <!-- Dynamic horizontal stream of blocks -->
-        <div id="blockchain-stream-container" class="blockchain-stream">
-          <!-- Rendered dynamically -->
+        <div id="instructor-courses-list" class="grid-2">
+          <!-- Loaded dynamically -->
         </div>
       </div>
 
-      <!-- Block Detail & Merkle Inspector Modal -->
-      <div id="block-inspector-card" class="card" style="display: none;">
-        <div class="card-header">
-          <div class="card-title" id="inspector-title">Block Details</div>
-          <button class="btn btn-secondary btn-sm" onclick="this.parentElement.parentElement.style.display='none'">✕ Close</button>
-        </div>
-        <div id="inspector-content" class="code-box"></div>
-      </div>
-    </section>
-
-    <!-- =================================================================== -->
-    <!-- TAB 4: ATTACK & TAMPER SIMULATION LAB (ACADEMIC LAB) -->
-    <!-- =================================================================== -->
-    <section id="tab-attack-lab" class="tab-pane">
-      <div class="card" style="border-left: 4px solid var(--accent-purple);">
-        <div class="card-header">
-          <div class="card-title">🧪 Academic Security Demonstration & Attack Simulation Sandbox</div>
-          <span class="badge badge-cyan">Real Cryptographic Verification</span>
-        </div>
-        <p style="font-size: 0.9rem; color: var(--text-muted);">
-          This laboratory allows professors and evaluators to actively simulate attacks from external adversaries and malicious backend developers/DBAs. 
-          Execute each scenario below to see how mathematical digital signatures, Merkle trees, and hash-chaining stop the attack in real-time.
-        </p>
-      </div>
-
-      <!-- Attack Scenarios Grid -->
-      <div class="grid-2">
-
-        <!-- SCENARIO 1: DEVELOPER DB-INJECTION (PRE-VALIDATED STUDENT) -->
-        <div class="attack-card">
-          <div class="attack-title">
-            <span>🚨 Attack 1: Developer Injects Fake Pre-Validated Student in DB</span>
-            <span class="badge badge-closed">Rogue DBA</span>
-          </div>
-          <div class="attack-desc">
-            A rogue developer with full SQLite/DB access directly inserts a new student into the <code>invitations</code> table, claiming they were pre-validated by the Admin.
-          </div>
-          <button class="btn btn-danger" onclick="runAttack_DeveloperDbInjection()">
-            Simulate DB Injection Attack
-          </button>
-        </div>
-
-        <!-- SCENARIO 2: DEVELOPER BLOCK-INJECTION (UNAUTHORIZED ENROLLEE) -->
-        <div class="attack-card">
-          <div class="attack-title">
-            <span>🚨 Attack 2: Developer Injects Enrollee Directly into Block</span>
-            <span class="badge badge-closed">Ledger Forgery</span>
-          </div>
-          <div class="attack-desc">
-            The developer attempts to inject "Eve (Rogue Developer)" into an already mined block without having the student's or instructor's private key.
-          </div>
-          <button class="btn btn-danger" onclick="runAttack_DeveloperBlockInjection()">
-            Simulate Block Injection Attack
-          </button>
-        </div>
-
-        <!-- SCENARIO 3: RECORD TAMPERING IN EXISTING BLOCK -->
-        <div class="attack-card">
-          <div class="attack-title">
-            <span>🚨 Attack 3: Developer Modifies Student Data in Storage</span>
-            <span class="badge badge-closed">Data Tampering</span>
-          </div>
-          <div class="attack-desc">
-            The developer alters Alice's grade/enrollment payload inside Block #1. The hash recalculated over the modified data will fail both the ECDSA signature check and the Merkle root.
-          </div>
-          <button class="btn btn-danger" onclick="runAttack_TamperTransactionData()">
-            Simulate Storage Record Tampering
-          </button>
-        </div>
-
-        <!-- SCENARIO 4: FRONT-RUNNING / SCHEDULE BYPASS -->
-        <div class="attack-card">
-          <div class="attack-title">
-            <span>🚨 Attack 4: Early Enrollment (Front-Running Attack)</span>
-            <span class="badge badge-closed">Time-Lock Bypass</span>
-          </div>
-          <div class="attack-desc">
-            An eager student or privileged insider attempts to submit an enrollment to course <code>CS-902</code> before its scheduled opening time.
-          </div>
-          <button class="btn btn-danger" onclick="runAttack_FrontRunning()">
-            Simulate Early Front-Running Attack
-          </button>
-        </div>
-
-        <!-- SCENARIO 5: REPLAY ATTACK -->
-        <div class="attack-card">
-          <div class="attack-title">
-            <span>🚨 Attack 5: Replay Attack (Duplicate Spent Nonce)</span>
-            <span class="badge badge-closed">Replay</span>
-          </div>
-          <div class="attack-desc">
-            An adversary intercepts a valid student transaction and re-transmits it to double-enroll or spend the same capability nonce twice.
-          </div>
-          <button class="btn btn-danger" onclick="runAttack_Replay()">
-            Simulate Replay Attack
-          </button>
-        </div>
-
-        <!-- SCENARIO 6: BLOCK HASH CORRUPTION -->
-        <div class="attack-card">
-          <div class="attack-title">
-            <span>🚨 Attack 6: Corrupt Block Hash / Bit Rot</span>
-            <span class="badge badge-closed">Hash Chain</span>
-          </div>
-          <div class="attack-desc">
-            Directly flip bits in the header hash of Block #1. Downstream blocks will immediately reject the broken <code>prev_hash</code> pointer.
-          </div>
-          <button class="btn btn-danger" onclick="runAttack_CorruptHash()">
-            Corrupt Block Header Hash
-          </button>
-        </div>
-
-      </div>
-
-      <!-- Real-Time Cryptographic Verification Terminal -->
-      <div class="card" style="margin-top: 1.5rem;">
-        <div class="card-header">
-          <div class="card-title">📋 Real-Time Cryptographic Audit Log & Mathematical Diagnostics</div>
-          <div style="display: flex; gap: 0.5rem;">
-            <button class="btn btn-primary btn-sm" onclick="runGlobalAudit()">Execute Deep Audit Now</button>
-            <button class="btn btn-secondary btn-sm" onclick="resetLedger()">Restore Clean Ledger</button>
-          </div>
-        </div>
-        <div id="audit-results-terminal" class="code-box" style="min-height: 220px;">
-[AUDIT ENGINE READY]
-Awaiting simulation command or manual audit trigger.
-Click any attack button above to execute mathematical checks.
-        </div>
-      </div>
-    </section>
-
-    <!-- =================================================================== -->
-    <!-- TAB 5: KEY MANAGEMENT & IDENTITY -->
-    <!-- =================================================================== -->
-    <section id="tab-identity" class="tab-pane">
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">🔑 Generate New Client KeyPair</div>
-          </div>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-            Generates an uncompressed ECDSA P-256 (secp256r1) keypair entirely inside your browser's WebCrypto subsystem. 
-            The private key stays strictly in client-side memory.
-          </p>
-          <button class="btn btn-primary" onclick="generateNewIdentity()">Generate KeyPair in Browser</button>
-        </div>
-
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">🔄 Switch Pre-Populated Evaluation Roles</div>
-          </div>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-            Instantly switch your active client session between different identities to test all workflows:
-          </p>
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-            <button class="btn btn-secondary" onclick="switchIdentityRole('student')">Student (Alice)</button>
-            <button class="btn btn-secondary" onclick="switchIdentityRole('instructor')">Instructor (Dr. Turing)</button>
-            <button class="btn btn-secondary" onclick="switchIdentityRole('attacker')">Attacker / Rogue Dev (Eve)</button>
-          </div>
-        </div>
-      </div>
-
+      <!-- Student Invitation Requests Table -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title">Active Role Key Details</div>
+          <div class="card-title">👥 Student Validation Requests</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadInstructorRequests()">↻ Refresh Requests</button>
         </div>
-        <div class="form-group">
-          <label class="form-label">Role Name</label>
-          <input type="text" id="role-name-display" class="form-input" readonly>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Public Key (Hex)</label>
-          <input type="text" id="role-pubkey-display" class="form-input form-mono" readonly>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Private Key (Hex)</label>
-          <input type="text" id="role-privkey-display" class="form-input form-mono" readonly>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Student Name</th>
+                <th>Student Email</th>
+                <th>Course</th>
+                <th>Request Time</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="instructor-requests-tbody">
+              <!-- Loaded dynamically -->
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
 
   </main>
 
+  <!-- Cryptographic Client & UI Scripts -->
   <script src="/static/js/crypto_client.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/portal.js"></script>
 </body>
 </html>

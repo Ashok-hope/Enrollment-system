@@ -2,16 +2,13 @@ import json
 import hashlib
 import os
 from typing import List, Tuple, Optional, Dict, Any
-from cryptography.hazmat.primitives.asymmetric import ec, ed25519
+from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidSignature
 
 def canonical_json(data: Any) -> bytes:
-    """
-    Produce deterministic canonical JSON bytes (RFC 8785 style)
-    ensuring signatures are identical across client and server.
-    """
+    """Produce deterministic canonical JSON bytes (RFC 8785 style)."""
     return json.dumps(data, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode('utf-8')
 
 def sha256_hex(data: bytes) -> str:
@@ -27,10 +24,6 @@ def sha256_str(text: str) -> str:
 # =====================================================================
 
 class MerkleTree:
-    """
-    Cryptographic Merkle Tree using SHA-256.
-    Computes deterministic Merkle Root for any list of transactions.
-    """
     def __init__(self, tx_hashes: List[str]):
         self.tx_hashes = tx_hashes
         self.tree_levels: List[List[str]] = []
@@ -47,7 +40,6 @@ class MerkleTree:
             next_level = []
             for i in range(0, len(current_level), 2):
                 left = current_level[i]
-                # If odd number of elements, duplicate last node (standard blockchain rule)
                 right = current_level[i + 1] if i + 1 < len(current_level) else left
                 combined = (left + right).encode('utf-8')
                 parent_hash = sha256_hex(combined)
@@ -58,7 +50,6 @@ class MerkleTree:
         return current_level[0]
 
     def get_proof(self, index: int) -> List[Dict[str, str]]:
-        """Generate Merkle Audit Path proof for transaction at given index."""
         proof = []
         if index < 0 or index >= len(self.tx_hashes):
             return proof
@@ -76,7 +67,6 @@ class MerkleTree:
 
     @staticmethod
     def verify_proof(tx_hash: str, proof: List[Dict[str, str]], expected_root: str) -> bool:
-        """Verify that a transaction hash belongs to the Merkle root via the audit path."""
         current = tx_hash
         for step in proof:
             sibling = step["hash"]
@@ -88,13 +78,20 @@ class MerkleTree:
         return current.lower() == expected_root.lower()
 
 # =====================================================================
-# ASYMMETRIC CRYPTOGRAPHY (ECDSA SECP256R1 / P-256 & ED25519)
+# ASYMMETRIC CRYPTOGRAPHY (ECDSA SECP256R1 / P-256)
 # =====================================================================
 
 def generate_ecdsa_keypair() -> Tuple[str, str]:
-    """Generate an ECDSA (P-256) keypair returning (public_key_hex, private_key_hex)."""
+    """
+    Generate an ECDSA (P-256) keypair returning (public_key_hex, private_key_hex).
+    Exports PKCS#8 DER format for private key so WebCrypto imports cleanly without errors.
+    """
     priv_key = ec.generate_private_key(ec.SECP256R1())
-    priv_bytes = priv_key.private_numbers().private_value.to_bytes(32, 'big')
+    priv_bytes = priv_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
     
     pub_key = priv_key.public_key()
     pub_bytes = pub_key.public_bytes(
@@ -104,14 +101,18 @@ def generate_ecdsa_keypair() -> Tuple[str, str]:
     return pub_bytes.hex(), priv_bytes.hex()
 
 def sign_data_ecdsa(private_key_hex: str, data_bytes: bytes) -> str:
-    """Sign arbitrary data with ECDSA P-256 private key, returning hex signature (IEEE P1363 raw r||s 64-byte format)."""
-    priv_int = int(private_key_hex, 16)
-    priv_key = ec.derive_private_key(priv_int, ec.SECP256R1())
+    """Sign arbitrary data with ECDSA P-256 private key, returning IEEE P1363 raw (r, s) 64-byte hex."""
+    clean_hex = private_key_hex.strip().replace("0x", "")
+    priv_bytes = bytes.fromhex(clean_hex)
     
-    # We use ECDSA with SHA-256
+    if len(priv_bytes) == 32:
+        priv_int = int(clean_hex, 16)
+        priv_key = ec.derive_private_key(priv_int, ec.SECP256R1())
+    else:
+        priv_key = serialization.load_der_private_key(priv_bytes, password=None)
+    
     der_signature = priv_key.sign(data_bytes, ec.ECDSA(hashes.SHA256()))
     
-    # Convert DER to IEEE P1363 raw (r, s) 64 bytes for easy WebCrypto interop
     from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
     r, s = decode_dss_signature(der_signature)
     r_bytes = r.to_bytes(32, 'big')
@@ -121,12 +122,13 @@ def sign_data_ecdsa(private_key_hex: str, data_bytes: bytes) -> str:
 def verify_signature_ecdsa(public_key_hex: str, data_bytes: bytes, signature_hex: str) -> bool:
     """Verify an ECDSA P-256 signature against public key hex and data bytes."""
     try:
-        pub_bytes = bytes.fromhex(public_key_hex)
-        sig_bytes = bytes.fromhex(signature_hex)
+        clean_pub = public_key_hex.strip().replace("0x", "")
+        clean_sig = signature_hex.strip().replace("0x", "")
+        pub_bytes = bytes.fromhex(clean_pub)
+        sig_bytes = bytes.fromhex(clean_sig)
         
         pub_key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), pub_bytes)
         
-        # Check if signature is 64 bytes (raw r || s IEEE P1363 from WebCrypto) or DER
         if len(sig_bytes) == 64:
             from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
             r = int.from_bytes(sig_bytes[:32], 'big')
@@ -145,14 +147,9 @@ def verify_signature_ecdsa(public_key_hex: str, data_bytes: bytes, signature_hex
 # =====================================================================
 
 def encrypt_payload_aes_gcm(plaintext: str, key_hex: str) -> Dict[str, str]:
-    """
-    Encrypt plaintext string using AES-256-GCM.
-    Returns dictionary with ciphertext_hex, iv_hex, and tag_hex.
-    """
     key = bytes.fromhex(key_hex)
-    iv = os.urandom(12) # 96-bit IV
+    iv = os.urandom(12)
     aesgcm = AESGCM(key)
-    # aesgcm.encrypt appends 16-byte tag to the ciphertext
     ct_with_tag = aesgcm.encrypt(iv, plaintext.encode('utf-8'), None)
     ciphertext = ct_with_tag[:-16]
     tag = ct_with_tag[-16:]
@@ -163,7 +160,6 @@ def encrypt_payload_aes_gcm(plaintext: str, key_hex: str) -> Dict[str, str]:
     }
 
 def decrypt_payload_aes_gcm(ciphertext_hex: str, iv_hex: str, tag_hex: str, key_hex: str) -> Optional[str]:
-    """Decrypt AES-256-GCM ciphertext using provided key, IV, and auth tag."""
     try:
         key = bytes.fromhex(key_hex)
         iv = bytes.fromhex(iv_hex)

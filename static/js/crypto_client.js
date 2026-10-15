@@ -21,6 +21,18 @@ const CryptoClient = {
     return bytes;
   },
 
+  // Utility: Base64URL encode bytes
+  base64UrlEncode(bytes) {
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  },
+
   // Deterministic Canonical JSON Stringify (matching Python canonical_json)
   canonicalJson(obj) {
     if (obj === null || typeof obj !== 'object') {
@@ -73,26 +85,63 @@ const CryptoClient = {
   },
 
   // Sign Arbitrary String with ECDSA P-256 Private Key
-  async signMessage(cryptoKeyOrHex, messageString) {
+  async signMessage(cryptoKeyOrHex, messageString, pubKeyHex = null) {
     const encoder = new TextEncoder();
     const data = encoder.encode(messageString);
 
     let privateKey;
     if (typeof cryptoKeyOrHex === 'string') {
-      // Import from PKCS8 hex
-      const pkcs8Buf = this.hex2buf(cryptoKeyOrHex);
-      privateKey = await window.crypto.subtle.importKey(
-        "pkcs8",
-        pkcs8Buf,
-        { name: "ECDSA", namedCurve: "P-256" },
-        false,
-        ["sign"]
-      );
+      const cleanHex = cryptoKeyOrHex.trim().replace(/^0x/, '');
+      const keyBytes = this.hex2buf(cleanHex);
+
+      if (keyBytes.length === 32) {
+        // Raw 32-byte scalar: wrap with standard SECP256R1 PKCS#8 ASN.1 DER envelope
+        const pkcs8Prefix = "3041020100301306072a8648ce3d020106082a8648ce3d030107042730250201010420";
+        const fullPkcs8 = this.hex2buf(pkcs8Prefix + cleanHex);
+        try {
+          privateKey = await window.crypto.subtle.importKey(
+            "pkcs8",
+            fullPkcs8,
+            { name: "ECDSA", namedCurve: "P-256" },
+            false,
+            ["sign"]
+          );
+        } catch (e) {
+          // JWK Fallback
+          const jwk = {
+            kty: "EC",
+            crv: "P-256",
+            d: this.base64UrlEncode(keyBytes),
+            ext: true
+          };
+          if (pubKeyHex && pubKeyHex.length >= 130) {
+            const cleanPub = pubKeyHex.trim().replace(/^0x/, '');
+            jwk.x = this.base64UrlEncode(this.hex2buf(cleanPub.substring(2, 66)));
+            jwk.y = this.base64UrlEncode(this.hex2buf(cleanPub.substring(66, 130)));
+          }
+          privateKey = await window.crypto.subtle.importKey(
+            "jwk",
+            jwk,
+            { name: "ECDSA", namedCurve: "P-256" },
+            false,
+            ["sign"]
+          );
+        }
+      } else {
+        // Already full PKCS#8 DER
+        privateKey = await window.crypto.subtle.importKey(
+          "pkcs8",
+          keyBytes,
+          { name: "ECDSA", namedCurve: "P-256" },
+          false,
+          ["sign"]
+        );
+      }
     } else {
       privateKey = cryptoKeyOrHex;
     }
 
-    // Sign using SHA-256. WebCrypto outputs IEEE P1363 (64 bytes raw r||s)
+    // Sign using SHA-256 (Outputs IEEE P1363 raw r||s 64-byte format)
     const sigBuffer = await window.crypto.subtle.sign(
       { name: "ECDSA", hash: { name: "SHA-256" } },
       privateKey,
@@ -130,7 +179,6 @@ const CryptoClient = {
     );
 
     const encryptedBytes = new Uint8Array(encryptedWithTag);
-    // In WebCrypto, the last 16 bytes is the authentication tag
     const ciphertext = encryptedBytes.slice(0, encryptedBytes.length - 16);
     const tag = encryptedBytes.slice(encryptedBytes.length - 16);
 
