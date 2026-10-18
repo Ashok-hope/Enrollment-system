@@ -52,10 +52,54 @@ def test_api_raw_sql_execution_and_attack():
     with TestClient(app) as client:
         unique_inv_id = f"inv_sql_{uuid.uuid4().hex[:6]}"
         sql_query = f"""
-        INSERT OR REPLACE INTO invitations (invite_id, course_id, student_public_key, valid_from, valid_until, nonce, admin_signature, issued_at) 
-        VALUES ('{unique_inv_id}', 'CS-801', '04bad000', '2026-01-01', '2026-12-31', 'fake_nonce', 'bad_sig', '2026-10-15');
+        INSERT OR REPLACE INTO invitations (invite_id, course_id, student_identity_hash, valid_from, valid_until, nonce, admin_signature, issued_at, row_seal) 
+        VALUES ('{unique_inv_id}', 'CS-801', 'bad_hash_000', '2026-01-01', '2026-12-31', 'fake_nonce', 'bad_sig', '2026-10-15', 'forged_seal');
         """
         res = client.post("/api/simulation/execute-sql", json={"query": sql_query})
         assert res.status_code == 200
         data = res.json()
         assert data["sql_execution"]["success"] is True
+        assert data["sql_execution"]["seal_verification"]["tampering_detected"] is True
+
+def test_api_pen_test_endpoints():
+    with TestClient(app) as client:
+        # 1. DB Snoop
+        snoop_res = client.get("/api/simulation/pen-test/db-snoop")
+        assert snoop_res.status_code == 200
+        snoop_data = snoop_res.json()
+        assert "users_table" in snoop_data
+        assert "security_assessment" in snoop_data
+
+        # 2. Key Hunting
+        key_res = client.get("/api/simulation/pen-test/key-hunting")
+        assert key_res.status_code == 200
+        key_data = key_res.json()
+        assert "verdict" in key_data
+
+        # 3. Decrypt Without Key
+        dec_res = client.post("/api/simulation/pen-test/decrypt-without-key", json={})
+        assert dec_res.status_code == 200
+        dec_data = dec_res.json()
+        assert dec_data["decryption_result"] is None
+        assert "REJECTED" in dec_data["authenticated_tag_status"]
+
+def test_api_pdf_report_generation():
+    with TestClient(app) as client:
+        # Seed an enrollment first
+        seed_res = client.post("/api/simulation/auto-seed-enrollment")
+        assert seed_res.status_code == 200
+
+        # Get the transaction ID from the ledger
+        blocks_res = client.get("/api/ledger/blocks")
+        assert blocks_res.status_code == 200
+        blocks = blocks_res.json()
+        assert len(blocks) > 1
+        tx = blocks[1]["transactions"][0]
+        tx_id = tx["tx_id"]
+
+        # Request the PDF report
+        pdf_res = client.get(f"/api/enrollments/report/{tx_id}/pdf?student_name=Alice%20Wonderland")
+        assert pdf_res.status_code == 200
+        assert pdf_res.headers["content-type"] == "application/pdf"
+        assert len(pdf_res.content) > 1000  # Valid non-empty PDF bytes
+

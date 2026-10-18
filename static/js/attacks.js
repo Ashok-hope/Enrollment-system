@@ -5,25 +5,92 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 const SQL_TEMPLATES = {
-  fake_invite: `INSERT INTO invitations (invite_id, course_id, student_public_key, valid_from, valid_until, nonce, admin_signature, issued_at) 
-VALUES ('forged_inv_eve', 'CS-801', '04ee11223344556677889900aabbccddeeff0011223344556677889900aabbccddeeff0011223344556677889900aabbccddeeff0011223344556677889900aabbccddeeff', '2026-01-01T00:00:00Z', '2026-12-31T23:59:59Z', 'forged_nonce', 'bad_signature_from_developer_000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', '2026-10-15T21:00:00Z');`,
+  fake_invite: `INSERT INTO invitations (invite_id, course_id, student_identity_hash, valid_from, valid_until, nonce, admin_signature, issued_at, row_seal) 
+VALUES ('forged_inv_eve', 'CS-801', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', '2026-01-01T00:00:00Z', '2026-12-31T23:59:59Z', 'forged_nonce', 'bad_signature_from_developer_000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000', '2026-10-15T21:00:00Z', 'forged_seal_unauthorized');`,
 
   tamper_block: `UPDATE ledger_blocks 
-SET raw_block_json = REPLACE(raw_block_json, 'Alice Wonderland', 'Eve Malicious (Rogue Developer)') 
+SET encrypted_block_payload = 'TAMPERED_DEVELOPER_PAYLOAD_EVE',
+    block_hash = 'bad_block_hash_0000000000000000000000000000000000000000000000000000' 
 WHERE block_index = 1;`,
 
-  fake_block: `INSERT INTO ledger_blocks (block_index, prev_hash, merkle_root, timestamp, nonce, block_hash, raw_block_json) 
-VALUES (99, '0000000000000000000000000000000000000000000000000000000000000000', 'fake_merkle_root', '2026-10-15T21:00:00Z', 0, 'fake_block_hash_by_developer', '{}');`,
+  fake_block: `INSERT INTO ledger_blocks (block_index, prev_hash, merkle_root, timestamp, nonce, block_hash, encrypted_block_payload, iv, tag, row_seal) 
+VALUES (99, '0000000000000000000000000000000000000000000000000000000000000000', 'fake_merkle_root', '2026-10-15T21:00:00Z', 0, 'fake_block_hash_by_developer', 'fake_payload', 'iv01', 'tag01', 'bad_seal');`,
 
-  select_invites: `SELECT invite_id, course_id, SUBSTR(student_public_key, 1, 16) || '...' AS student_pub, issued_at FROM invitations;`,
+  select_users_encrypted: `SELECT user_id, identity_hash, email_hash, SUBSTR(encrypted_profile, 1, 24) || '...' AS ciphertext, SUBSTR(row_seal, 1, 16) || '...' AS row_seal FROM users;`,
 
-  select_blocks: `SELECT block_index, SUBSTR(prev_hash, 1, 12) || '...' AS prev_hash, SUBSTR(merkle_root, 1, 12) || '...' AS merkle, SUBSTR(block_hash, 1, 12) || '...' AS block_hash FROM ledger_blocks;`
+  select_invites: `SELECT invite_id, course_id, SUBSTR(student_identity_hash, 1, 16) || '...' AS student_id_hash, SUBSTR(row_seal, 1, 16) || '...' AS seal FROM invitations;`,
+
+  select_blocks: `SELECT block_index, SUBSTR(prev_hash, 1, 12) || '...' AS prev_hash, SUBSTR(merkle_root, 1, 12) || '...' AS merkle, SUBSTR(block_hash, 1, 12) || '...' AS block_hash, SUBSTR(row_seal, 1, 16) || '...' AS seal FROM ledger_blocks;`
 };
 
 function populateSqlAttack(type) {
   const textarea = document.getElementById('sql-query-input');
   if (textarea && SQL_TEMPLATES[type]) {
     textarea.value = SQL_TEMPLATES[type];
+  }
+}
+
+async function runPenTest_DbSnoop() {
+  logTerminal(`>>> EXECUTING DATABASE SNOOPING & EXFILTRATION PROBE:\nChecking whether plaintext student records or unhashed keys exist in SQLite...`);
+  try {
+    const res = await fetch('/api/simulation/pen-test/db-snoop');
+    const data = await res.json();
+
+    const card = document.getElementById('pentest-result-card');
+    const title = document.getElementById('pentest-result-title');
+    const content = document.getElementById('pentest-result-content');
+
+    card.style.display = 'block';
+    title.textContent = 'Penetration Test: Database Snooping & Storage Inspection Result';
+    content.textContent = JSON.stringify(data, null, 2);
+
+    logTerminal(`[PEN-TEST 1 VERDICT]:\n${data.security_assessment}\nInspect the raw SQLite tables above: user profiles, certificates, and blocks are encrypted with AES-256-GCM and keyed with HMAC seals.`);
+  } catch (err) {
+    logTerminal(`[PEN-TEST ERROR]: ${err.message}`);
+  }
+}
+
+async function runPenTest_KeyHunting() {
+  logTerminal(`>>> EXECUTING PRIVATE KEY HUNTING SCAN:\nSearching server storage, SQLite tables, and memory for student private signing keys...`);
+  try {
+    const res = await fetch('/api/simulation/pen-test/key-hunting');
+    const data = await res.json();
+
+    const card = document.getElementById('pentest-result-card');
+    const title = document.getElementById('pentest-result-title');
+    const content = document.getElementById('pentest-result-content');
+
+    card.style.display = 'block';
+    title.textContent = 'Penetration Test: Private Key Extraction Scan Result';
+    content.textContent = JSON.stringify(data, null, 2);
+
+    logTerminal(`[PEN-TEST 2 VERDICT]:\n${data.verdict}\nNo student private keys are held in plaintext on the server.`);
+  } catch (err) {
+    logTerminal(`[PEN-TEST ERROR]: ${err.message}`);
+  }
+}
+
+async function runPenTest_DecryptWithoutKey() {
+  logTerminal(`>>> EXECUTING UNAUTHORIZED DECRYPTION ATTACK (CPA/CCA):\nAttempting to decrypt database ciphertext with attacker-guessed secret...`);
+  try {
+    const res = await fetch('/api/simulation/pen-test/decrypt-without-key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+
+    const card = document.getElementById('pentest-result-card');
+    const title = document.getElementById('pentest-result-title');
+    const content = document.getElementById('pentest-result-content');
+
+    card.style.display = 'block';
+    title.textContent = 'Penetration Test: Decrypt Without Key Result';
+    content.textContent = JSON.stringify(data, null, 2);
+
+    logTerminal(`[PEN-TEST 3 VERDICT]:\nTarget: ${data.target}\nAuthentication Tag Status: ${data.authenticated_tag_status}\nDecrypted Data: ${JSON.stringify(data.decryption_result)}\n${data.verdict}`);
+  } catch (err) {
+    logTerminal(`[PEN-TEST ERROR]: ${err.message}`);
   }
 }
 

@@ -181,3 +181,36 @@ def auto_seed_enrollment():
 def reset_ledger():
     db.reset_to_clean_state()
     return {"success": True, "message": "Blockchain ledger restored to pristine state."}
+
+class DecryptPenTestRequest(BaseModel):
+    sample_ciphertext: Optional[str] = None
+    iv: Optional[str] = None
+    tag: Optional[str] = None
+
+@router.get("/pen-test/db-snoop")
+def pen_test_db_snoop():
+    """
+    Penetration test: Direct SQLite database eavesdropping / data exfiltration probe.
+    Demonstrates that all student identity records, certificates, and blocks are encrypted and hashed.
+    """
+    return db.dump_raw_database_tables()
+
+@router.get("/pen-test/key-hunting")
+def pen_test_key_hunting():
+    """
+    Penetration test: Private key hunting across server storage.
+    Demonstrates that student ECDSA signing keys are never stored in plaintext on the server.
+    """
+    return db.test_private_key_hunting()
+
+@router.post("/pen-test/decrypt-without-key")
+def pen_test_decrypt_without_key(payload: Optional[DecryptPenTestRequest] = None):
+    """
+    Penetration test: Chosen ciphertext / unauthorized decryption attack.
+    Demonstrates that without the exact 256-bit symmetric key, AES-256-GCM authentication fails.
+    """
+    ct = payload.sample_ciphertext if payload else None
+    iv = payload.iv if payload else None
+    tag = payload.tag if payload else None
+    return db.test_decryption_without_key(ct, iv, tag)
+

@@ -4,7 +4,7 @@ import uuid
 import datetime
 from typing import Dict, Optional, Tuple
 from core.models import UserRegister, UserLogin, UserProfile
-from core.crypto_engine import generate_ecdsa_keypair
+from core.crypto_engine import generate_ecdsa_keypair, sha256_str, encrypt_payload_aes_gcm, decrypt_payload_aes_gcm
 from core.logger import log_event
 
 def hash_password(password: str, salt: Optional[str] = None) -> Tuple[str, str]:
@@ -31,6 +31,7 @@ class UserRecord:
         self.salt = salt
         self.pub_key = pub_key
         self.priv_key = priv_key
+        self.identity_hash = sha256_str(pub_key)
         self.created_at = created_at
 
     def to_profile(self) -> UserProfile:
@@ -40,5 +41,6 @@ class UserRecord:
             name=self.name,
             role=self.role,
             public_key=self.pub_key,
+            identity_hash=self.identity_hash,
             created_at=self.created_at
         )

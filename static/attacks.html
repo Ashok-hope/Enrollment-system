@@ -51,6 +51,67 @@
       </p>
     </div>
 
+    <!-- ADVANCED PENETRATION TESTING & SNOOPING SUITE -->
+    <div class="card" style="border-left: 4px solid var(--accent-purple);">
+      <div class="card-header">
+        <div class="card-title">🕵️ Developer & Database Penetration Testing Suite</div>
+        <span class="badge badge-purple">Zero-Knowledge Storage Verification</span>
+      </div>
+      <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 1rem;">
+        Penetration testing vectors simulating a rogue DBA or backend developer attempting to exfiltrate plaintext student data, locate private signing keys, or decrypt ciphertext without authorization.
+      </p>
+
+      <div class="grid-3">
+        <!-- Pen Test 1: Database Eavesdropping -->
+        <div class="card" style="margin-bottom: 0; background: var(--bg-tertiary);">
+          <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-cyan); font-size: 0.95rem;">
+            1. Database Snooping Probe
+          </div>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Dumps raw SQLite storage tables to prove zero plaintext student PII or unhashed identifiers exist on disk.
+          </p>
+          <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="runPenTest_DbSnoop()">
+            🔍 Run DB Snooping Probe
+          </button>
+        </div>
+
+        <!-- Pen Test 2: Private Key Hunting -->
+        <div class="card" style="margin-bottom: 0; background: var(--bg-tertiary);">
+          <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-purple); font-size: 0.95rem;">
+            2. Server Storage Key Hunting
+          </div>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Scans database and file storage for student ECDSA signing keys to verify zero plaintext private keys exist on the server.
+          </p>
+          <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="runPenTest_KeyHunting()">
+            🔑 Run Key Hunting Scan
+          </button>
+        </div>
+
+        <!-- Pen Test 3: Unauthorized Decryption -->
+        <div class="card" style="margin-bottom: 0; background: var(--bg-tertiary);">
+          <div style="font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-crimson); font-size: 0.95rem;">
+            3. Decrypt Without Key (CPA/CCA)
+          </div>
+          <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Extracts real student ciphertext from SQLite and attempts brute-force decryption without the master key.
+          </p>
+          <button class="btn btn-secondary btn-sm" style="width: 100%;" onclick="runPenTest_DecryptWithoutKey()">
+            🔓 Attempt Decryption Without Key
+          </button>
+        </div>
+      </div>
+
+      <!-- Pen Test Output Panel -->
+      <div id="pentest-result-card" style="margin-top: 1.25rem; display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <div class="form-label" id="pentest-result-title" style="margin-bottom: 0;">Penetration Test Diagnostics:</div>
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('pentest-result-card').style.display='none'">✕ Dismiss</button>
+        </div>
+        <div id="pentest-result-content" class="code-box" style="max-height: 280px;"></div>
+      </div>
+    </div>
+
     <!-- SQL INJECTION & DATABASE TAMPERING SECTION -->
     <div class="card">
       <div class="card-header">
@@ -71,11 +132,14 @@
           <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('fake_block')">
             💥 Attack 3: Insert Forged Block #2 into DB
           </button>
+          <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('select_users_encrypted')">
+            🔍 Query: View Encrypted Users Table (AES-256-GCM + Hash)
+          </button>
           <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('select_invites')">
-            🔍 Query: View All DB Invitations
+            🔍 Query: View DB Invitations (Hashed Identities)
           </button>
           <button class="btn btn-secondary btn-sm" onclick="populateSqlAttack('select_blocks')">
-            🔍 Query: View Raw DB Blocks
+            🔍 Query: View Raw DB Blocks (Encrypted Payloads)
           </button>
         </div>
       </div>

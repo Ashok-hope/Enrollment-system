@@ -251,10 +251,12 @@ async function loadStudentApplications() {
     const blocksRes = await fetch('/api/ledger/blocks');
     const blocks = await blocksRes.json();
     const enrolledCourses = new Set();
+    const enrolledTxMap = {};
     blocks.forEach(b => {
       b.transactions.forEach(t => {
         if (t.student_public_key.toLowerCase() === PortalState.user.public_key.toLowerCase()) {
           enrolledCourses.add(t.course_id.toUpperCase());
+          enrolledTxMap[t.course_id.toUpperCase()] = t.tx_id;
         }
       });
     });
@@ -267,8 +269,13 @@ async function loadStudentApplications() {
       let actionBtn = '';
 
       if (isEnrolled) {
+        const txId = enrolledTxMap[req.course_id.toUpperCase()];
         statusBadge = `<span class="badge badge-green">🎉 Enrolled in Course</span>`;
-        actionBtn = `<span style="color: var(--accent-emerald); font-size: 0.8rem;">✓ Seat Confirmed</span>`;
+        actionBtn = `
+          <a href="/api/enrollments/report/${txId}/pdf?student_name=${encodeURIComponent(PortalState.user.name)}" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 0.35rem; text-decoration: none;">
+            📄 Download Certificate (PDF)
+          </a>
+        `;
       } else if (req.status === 'APPROVED') {
         const canEnroll = course.is_enrollment_open;
         if (canEnroll) {

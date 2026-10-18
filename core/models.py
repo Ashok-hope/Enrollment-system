@@ -17,6 +17,7 @@ class UserProfile(BaseModel):
     name: str
     role: str
     public_key: str
+    identity_hash: str # SHA-256 of public key
     created_at: str
 
 class CourseCreate(BaseModel):
@@ -60,6 +61,7 @@ class InviteRequestRecord(BaseModel):
     student_name: str
     student_email: str
     student_public_key: str
+    student_identity_hash: Optional[str] = None
     status: str # "PENDING", "APPROVED", "REJECTED"
     created_at: str
     invite_id: Optional[str] = None
@@ -68,6 +70,7 @@ class InviteCertificate(BaseModel):
     invite_id: str
     course_id: str
     student_public_key: str
+    student_identity_hash: Optional[str] = None
     valid_from: Optional[str] = None
     valid_until: Optional[str] = None
     nonce: str
@@ -78,7 +81,8 @@ class EnrollmentTransaction(BaseModel):
     tx_id: str
     course_id: str
     student_public_key: str
-    encrypted_details: str
+    student_identity_hash: Optional[str] = None # SHA-256(student_public_key)
+    encrypted_details: str # AES-256-GCM ciphertext
     iv_hex: str
     tag_hex: str
     invite_certificate: InviteCertificate
@@ -115,3 +119,12 @@ class AuditReport(BaseModel):
 
 class SqlExecutionRequest(BaseModel):
     query: str
+
+class PenetrationTestResult(BaseModel):
+    test_id: str
+    test_name: str
+    category: str # "DATA_CONFIDENTIALITY", "KEY_MANAGEMENT", "CRYPTANALYSIS", "SQL_MUTATION"
+    attempt_description: str
+    outcome: str # "BLOCKED", "DEFENDED", "FAILED"
+    proof_data: Dict[str, Any]
+    security_verdict: str
